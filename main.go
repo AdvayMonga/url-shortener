@@ -3,13 +3,11 @@ package main
 import (
 	"net/http"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
-	// "math/big"
-	// "encoding/json"
 	"time"
 	"math/rand"
-	// "strings"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -70,6 +68,69 @@ func createTable() {
 	fmt.Println("Table ready")
 }
 
+func redirectHandler(w http.ResponseWriter, r *http.Request) {
+	shortCode := r.URL.Path[1:]
+
+	if shortCode == "" {
+		fmt.Fprintf(w, "URL Shortener is running")
+		return
+	}
+
+	var originalURL string
+	query := `SELECT original_url FROM urls WHERE short_code = ?`
+	err := db.QueryRow(query, shortCode).Scan(&originalURL)
+
+	if err != nil {
+		http.Error(w, "Short URL not found", http.StatusNotFound)
+		return
+	}
+
+	updateQuery := `UPDATE urls SET click_count = click_count + 1 WHERE short_code = ?`
+	db.Exec(updateQuery, shortCode)
+
+	http.Redirect(w, r, originalURL, http.StatusFound)
+	fmt.Printf("Redirected %s -> %s\n", shortCode, originalURL)
+}
+
+func shortenHandler(w http.ResponseWriter, r *http.Request) {
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusBadRequest)
+		return
+	}
+
+	var request struct {
+		URL string `json:"url"`
+	}
+
+	err := json.NewDecoder(r.Body).Decode(&request)
+	if err != nil || request.URL == "" {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	shortCode, err := shortenURL(request.URL)
+	if err != nil {
+		http.Error(w, "Error creating short URL", http.StatusInternalServerError)
+		return
+	}
+
+	response := struct {
+		ShortCode string `json:"short_code"`
+		ShortURL string `json:"short_url"`
+	}{
+		ShortCode: shortCode,
+		ShortURL: "http://localhost:8080/" + shortCode,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+
+	fmt.Printf("Created short URL: %s -> %s\n", shortCode, request.URL)
+}
+
+
+
 func main() {
 	fmt.Println("Starting URL shortener...")
 
@@ -84,11 +145,13 @@ func main() {
 
 	createTable()
 
-	shortCode, err := shortenURL("https://qlab.umd.edu/people/thomas-barthel")
-	if err != nil {
-		log.Fatal("Error shortening URL:", err)
-	}
-
-
+    http.HandleFunc("/shorten", shortenHandler)  
+    http.HandleFunc("/", redirectHandler)       
+    
+    fmt.Println("Server running on http://localhost:8080")
+    fmt.Println("POST /shorten - Create short URL")
+    fmt.Println("GET /{code}   - Redirect to original URL")
+    
+    log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
