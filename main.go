@@ -46,7 +46,7 @@ func shortenURL(originalURL string) (string, error) {
 func codeExists(code string) bool {
 	var exists bool
 	query := `SELECT EXISTS(SELECT 1 FROM urls WHERE short_code = ?)`
-	db.QueryRow(query).Scan(&exists)
+	db.QueryRow(query, code).Scan(&exists)
 	
 	return exists
 }
@@ -100,7 +100,8 @@ func shortenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request struct {
-		URL string `json:"url"`
+		URL 		string `json:"url"`
+		CustomCode 	string `json:"custom_code"`
 	}
 
 	err := json.NewDecoder(r.Body).Decode(&request)
@@ -109,10 +110,33 @@ func shortenHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	shortCode, err := shortenURL(request.URL)
-	if err != nil {
-		http.Error(w, "Error creating short URL", http.StatusInternalServerError)
-		return
+	var shortCode string
+
+	if request.CustomCode != "" {
+		if len(request.CustomCode) < 3 || len(request.CustomCode) > 20 {
+			http.Error(w, "Custom code must be 3-20 characters", http.StatusBadRequest)
+			return
+		}
+
+		if codeExists(request.CustomCode) {
+			http.Error(w, "Custom code already taken", http.StatusConflict)
+			return
+		}
+		
+		shortCode = request.CustomCode
+		query := `INSERT INTO urls (short_code, original_url) VALUES (?, ?)`
+		_, err = db.Exec(query, shortCode, request.URL)
+		if err != nil {
+			http.Error(w, "Error creating short URL", http.StatusInternalServerError)
+			return
+		}
+
+	} else {
+		shortCode, err = shortenURL(request.URL)
+		if err != nil {
+			http.Error(w, "Error creating short URL", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	response := struct {
@@ -128,7 +152,6 @@ func shortenHandler(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Printf("Created short URL: %s -> %s\n", shortCode, request.URL)
 }
-
 
 
 func main() {
