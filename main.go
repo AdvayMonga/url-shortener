@@ -27,21 +27,6 @@ func generateShortCode() string {
 	return string(code)
 }
 
-func shortenURL(originalURL string) (string, error) {
-	shortCode := generateShortCode()
-
-	for codeExists(shortCode) {
-		shortCode = generateShortCode()
-	}
-
-	query := `INSERT INTO urls (short_code, original_url) VALUES (?, ?)`
-	_, err := db.Exec(query, shortCode, originalURL)
-	if err != nil {
-		return "", err
-	}
-
-	return shortCode, nil
-}
 
 func codeExists(code string) bool {
 	var exists bool
@@ -58,6 +43,7 @@ func createTable() {
 		short_code TEXT UNIQUE NOT NULL,
 		original_url TEXT NOT NULL,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		expires_at DATETIME NOT NULL,
 		click_count INTEGER DEFAULT 0
 	)`
 
@@ -77,11 +63,22 @@ func redirectHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var originalURL string
-	query := `SELECT original_url FROM urls WHERE short_code = ?`
-	err := db.QueryRow(query, shortCode).Scan(&originalURL)
+	var expiresAt time.Time
+
+	query := `SELECT original_url, expires_at FROM urls WHERE short_code = ?`
+	err := db.QueryRow(query, shortCode).Scan(&originalURL, &expiresAt)
 
 	if err != nil {
 		http.Error(w, "Short URL not found", http.StatusNotFound)
+		return
+	}
+
+	if time.Now().After(expiresAt) {
+		deleteQuery := `DELETE FROM urls WHERE short_code = ?`
+		db.Exec(deleteQuery, shortCode)
+		
+		http.Error(w, "This short URL has expired", http.StatusGone)
+		fmt.Printf("Deleted expired URL: %s\n", shortCode)
 		return
 	}
 
@@ -111,6 +108,7 @@ func shortenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var shortCode string
+	expiresAt := time.Now().AddDate(0,0,7)
 
 	if request.CustomCode != "" {
 		if len(request.CustomCode) < 3 || len(request.CustomCode) > 20 {
@@ -124,15 +122,22 @@ func shortenHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		
 		shortCode = request.CustomCode
-		query := `INSERT INTO urls (short_code, original_url) VALUES (?, ?)`
-		_, err = db.Exec(query, shortCode, request.URL)
+		query := `INSERT INTO urls (short_code, original_url, expires_at) VALUES (?, ?, ?)`
+		_, err = db.Exec(query, shortCode, request.URL, expiresAt)
 		if err != nil {
 			http.Error(w, "Error creating short URL", http.StatusInternalServerError)
 			return
 		}
 
 	} else {
-		shortCode, err = shortenURL(request.URL)
+		shortCode = generateShortCode()
+
+		for codeExists(shortCode) {
+			shortCode = generateShortCode()
+		}
+
+		query := `INSERT INTO urls (short_code, original_url, expires_at) VALUES (?, ?, ?)`
+		_, err := db.Exec(query, shortCode, request.URL, expiresAt)
 		if err != nil {
 			http.Error(w, "Error creating short URL", http.StatusInternalServerError)
 			return
