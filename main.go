@@ -58,7 +58,8 @@ func redirectHandler(w http.ResponseWriter, r *http.Request) {
 	shortCode := r.URL.Path[1:]
 
 	if shortCode == "" {
-		fmt.Fprintf(w, "URL Shortener is running")
+		// Serve the HTML interface
+		http.ServeFile(w, r, "index.html")
 		return
 	}
 
