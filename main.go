@@ -159,6 +159,56 @@ func shortenHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("Created short URL: %s -> %s\n", shortCode, request.URL)
 }
 
+func statsHandler(w http.ResponseWriter, r *http.Request) {
+	// Extract short code from URL path
+	// URL will be like: /stats/abc123
+	shortCode := r.URL.Path[len("/stats/"):]
+	
+	if shortCode == "" {
+		http.Error(w, "Short code required", http.StatusBadRequest)
+		return
+	}
+	
+	// Query database for stats
+	var originalURL string
+	var createdAt time.Time
+	var expiresAt time.Time
+	var clickCount int
+	
+	query := `SELECT original_url, created_at, expires_at, click_count FROM urls WHERE short_code = ?`
+	err := db.QueryRow(query, shortCode).Scan(&originalURL, &createdAt, &expiresAt, &clickCount)
+	
+	if err != nil {
+		http.Error(w, "Short URL not found", http.StatusNotFound)
+		return
+	}
+	
+	// Calculate if expired
+	isExpired := time.Now().After(expiresAt)
+	
+	// Build response
+	stats := struct {
+		ShortCode   string `json:"short_code"`
+		OriginalURL string `json:"original_url"`
+		CreatedAt   string `json:"created_at"`
+		ExpiresAt   string `json:"expires_at"`
+		ClickCount  int    `json:"click_count"`
+		IsExpired   bool   `json:"is_expired"`
+	}{
+		ShortCode:   shortCode,
+		OriginalURL: originalURL,
+		CreatedAt:   createdAt.Format("2006-01-02 15:04:05"),
+		ExpiresAt:   expiresAt.Format("2006-01-02 15:04:05"),
+		ClickCount:  clickCount,
+		IsExpired:   isExpired,
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(stats)
+	
+	fmt.Printf("Stats requested for: %s\n", shortCode)
+}
+
 
 func main() {
 	fmt.Println("Starting URL shortener...")
@@ -176,10 +226,12 @@ func main() {
 
     http.HandleFunc("/shorten", shortenHandler)  
     http.HandleFunc("/", redirectHandler)       
+    http.HandleFunc("/stats/", statsHandler)   
     
     fmt.Println("Server running on http://localhost:8080")
     fmt.Println("POST /shorten - Create short URL")
     fmt.Println("GET /{code}   - Redirect to original URL")
+    fmt.Println("GET /stats/{code} - Get URL stats")
     
     log.Fatal(http.ListenAndServe(":8080", nil))
 }
