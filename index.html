@@ -95,12 +95,39 @@
         <input type="text" id="shortUrl" readonly>
         <button onclick="copyToClipboard()">Copy</button>
     </div>
+
+    <hr style="margin: 40px 0; border: 0; border-top: 1px solid #ccc;">
+
+    <h2>Check Link Stats</h2>
+    <p>Enter a short code to view its analytics.</p>
+    
+    <form id="statsForm">
+        <input 
+            type="text" 
+            id="statsCode" 
+            placeholder="Enter short code (e.g., abc123)"
+            required
+        >
+        <button type="submit">Get Stats</button>
+    </form>
+
+    <div class="error" id="statsError"></div>
+
+    <div class="result" id="statsResult">
+        <strong>Stats:</strong><br>
+        <div id="statsContent"></div>
+    </div>
     
     <script>
         const form = document.getElementById('shortenForm');
         const resultDiv = document.getElementById('result');
         const errorDiv = document.getElementById('error');
         const shortUrlInput = document.getElementById('shortUrl');
+        
+        const statsForm = document.getElementById('statsForm');
+        const statsResultDiv = document.getElementById('statsResult');
+        const statsErrorDiv = document.getElementById('statsError');
+        const statsContent = document.getElementById('statsContent');
         
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -142,6 +169,40 @@
             } catch (error) {
                 errorDiv.textContent = error.message || 'Error creating short URL';
                 errorDiv.classList.add('show');
+            }
+        });
+
+        statsForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // Hide previous results
+            statsResultDiv.classList.remove('show');
+            statsErrorDiv.classList.remove('show');
+            
+            const code = document.getElementById('statsCode').value;
+            
+            try {
+                const response = await fetch(`/stats/${code}`);
+                
+                if (!response.ok) {
+                    throw new Error('Short code not found');
+                }
+                
+                const data = await response.json();
+                
+                const expiredText = data.is_expired ? ' (EXPIRED)' : '';
+                statsContent.innerHTML = `
+                    <strong>Short Code:</strong> ${data.short_code}<br>
+                    <strong>Original URL:</strong> <a href="${data.original_url}" target="_blank">${data.original_url}</a><br>
+                    <strong>Created:</strong> ${data.created_at}<br>
+                    <strong>Expires:</strong> ${data.expires_at}${expiredText}<br>
+                    <strong>Clicks:</strong> ${data.click_count}
+                `;
+                statsResultDiv.classList.add('show');
+                
+            } catch (error) {
+                statsErrorDiv.textContent = error.message || 'Error fetching stats';
+                statsErrorDiv.classList.add('show');
             }
         });
         
