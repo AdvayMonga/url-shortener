@@ -1,10 +1,12 @@
 package main
 
 import (
+	"net"
 	"net/http"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"log"
 	"time"
 	"math/rand"
@@ -12,6 +14,7 @@ import (
 )
 
 var db *sql.DB
+
 
 func generateShortCode() string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -209,6 +212,50 @@ func statsHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("Stats requested for: %s\n", shortCode)
 }
 
+type visitor struct {
+	count    int
+	lastSeen time.Time
+}
+
+var visitors = make(map[string]*visitor)
+var mu sync.Mutex
+
+func rateLimiter(next http.HandlerFunc) http.HandlerFunc {
+	const maxRequests = 100
+	const window = 1 * time.Minute
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+		mu.Lock()
+		v, exists := visitors[ip]
+
+		if !exists {
+			visitors[ip] = &visitor{count: 1, lastSeen: time.Now()}
+			mu.Unlock()
+			next(w, r)
+			return
+		}
+
+		if time.Since(v.lastSeen) > window {
+			v.count = 1
+			v.lastSeen = time.Now()
+			mu.Unlock()
+			next(w, r)
+			return
+		}
+
+		if v.count >= maxRequests {
+			mu.Unlock()
+			http.Error(w, "Too many requests", http.StatusTooManyRequests)
+			return
+		}
+
+		v.count++
+		mu.Unlock()
+		next(w, r)
+	}
+}
+
 
 func main() {
 	fmt.Println("Starting URL shortener...")
@@ -233,6 +280,6 @@ func main() {
     fmt.Println("GET /{code}   - Redirect to original URL")
     fmt.Println("GET /stats/{code} - Get URL stats")
     
-    log.Fatal(http.ListenAndServe(":8080", nil))
+    log.Fatal(http.ListenAndServe(":8080", rateLimiter(http.DefaultServeMux.ServeHTTP)))
 }
 
