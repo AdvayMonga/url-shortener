@@ -256,6 +256,32 @@ func rateLimiter(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	err := db.Ping()
+
+	status := "ok"
+	dbStatus := "connected"
+	httpStatus := http.StatusOK
+
+	if err != nil {
+		status = "unhealthy"
+		dbStatus = "disconnected"
+		httpStatus = http.StatusInternalServerError
+	}
+
+	response := struct {
+		Status   string `json:"status"`
+		DBStatus string `json:"database"`
+	}{
+		Status:   status,
+		DBStatus: dbStatus,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(httpStatus)
+	json.NewEncoder(w).Encode(response)
+}
+
 
 func main() {
 	fmt.Println("Starting URL shortener...")
@@ -274,11 +300,15 @@ func main() {
     http.HandleFunc("/shorten", shortenHandler)  
     http.HandleFunc("/", redirectHandler)       
     http.HandleFunc("/stats/", statsHandler)   
+	http.HandleFunc("/health", healthHandler)
+
     
     fmt.Println("Server running on http://localhost:8080")
     fmt.Println("POST /shorten - Create short URL")
-    fmt.Println("GET /{code}   - Redirect to original URL")
+    fmt.Println("GET /{code} - Redirect to original URL")
     fmt.Println("GET /stats/{code} - Get URL stats")
+	fmt.Println("GET /health - Health check")
+
     
     log.Fatal(http.ListenAndServe(":8080", rateLimiter(http.DefaultServeMux.ServeHTTP)))
 }
