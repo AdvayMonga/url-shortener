@@ -94,6 +94,10 @@
         <strong>Your short URL:</strong><br>
         <input type="text" id="shortUrl" readonly>
         <button onclick="copyToClipboard()">Copy</button>
+        <div style="margin-top: 15px; text-align: center;">
+            <strong>QR Code:</strong><br>
+            <img id="qrCode" style="margin-top: 10px; border: 1px solid #ccc;">
+        </div>
     </div>
 
     <hr style="margin: 40px 0; border: 0; border-top: 1px solid #ccc;">
@@ -160,6 +164,7 @@
                 
                 const data = await response.json();
                 shortUrlInput.value = data.short_url;
+                document.getElementById('qrCode').src = `/qr/${data.short_code}`;
                 resultDiv.classList.add('show');
                 
                 // Clear form

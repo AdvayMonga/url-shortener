@@ -11,6 +11,7 @@ import (
 	"time"
 	"math/rand"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/skip2/go-qrcode"
 )
 
 var db *sql.DB
@@ -256,6 +257,34 @@ func rateLimiter(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+func qrHandler(w http.ResponseWriter, r *http.Request) {
+	shortCode := r.URL.Path[len("/qr/"):]
+
+	if shortCode == "" {
+		http.Error(w, "Short code required", http.StatusBadRequest)
+		return
+	}
+
+	// Verify the short code exists
+	if !codeExists(shortCode) {
+		http.Error(w, "Short code not found", http.StatusNotFound)
+		return
+	}
+
+	shortURL := "http://localhost:8080/" + shortCode
+
+	png, err := qrcode.Encode(shortURL, qrcode.Medium, 256)
+	if err != nil {
+		http.Error(w, "Error generating QR code", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/png")
+	w.Write(png)
+
+	fmt.Printf("QR code generated for: %s\n", shortCode)
+}
+
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	err := db.Ping()
 
@@ -299,7 +328,8 @@ func main() {
 
     http.HandleFunc("/shorten", shortenHandler)  
     http.HandleFunc("/", redirectHandler)       
-    http.HandleFunc("/stats/", statsHandler)   
+    http.HandleFunc("/stats/", statsHandler)
+	http.HandleFunc("/qr/", qrHandler)
 	http.HandleFunc("/health", healthHandler)
 
     
@@ -307,6 +337,7 @@ func main() {
     fmt.Println("POST /shorten - Create short URL")
     fmt.Println("GET /{code} - Redirect to original URL")
     fmt.Println("GET /stats/{code} - Get URL stats")
+	fmt.Println("GET /qr/{code} - Get QR code")
 	fmt.Println("GET /health - Health check")
 
     
