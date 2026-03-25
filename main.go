@@ -10,6 +10,7 @@ import (
 	"log"
 	"time"
 	"math/rand"
+	"os"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/skip2/go-qrcode"
 )
@@ -333,14 +334,18 @@ func main() {
 	http.HandleFunc("/health", healthHandler)
 
     
-    fmt.Println("Server running on http://localhost:8080")
+    port := os.Getenv("PORT")
+    if port == "" {
+        port = "8080"
+    }
+    fmt.Println("Server running on port " + port)
     fmt.Println("POST /shorten - Create short URL")
     fmt.Println("GET /{code} - Redirect to original URL")
     fmt.Println("GET /stats/{code} - Get URL stats")
 	fmt.Println("GET /qr/{code} - Get QR code")
 	fmt.Println("GET /health - Health check")
 
-    
-    log.Fatal(http.ListenAndServe(":8080", rateLimiter(http.DefaultServeMux.ServeHTTP)))
+
+    log.Fatal(http.ListenAndServe(":"+port, rateLimiter(http.DefaultServeMux.ServeHTTP)))
 }
 
