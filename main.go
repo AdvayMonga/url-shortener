@@ -155,7 +155,7 @@ func shortenHandler(w http.ResponseWriter, r *http.Request) {
 		ShortURL string `json:"short_url"`
 	}{
 		ShortCode: shortCode,
-		ShortURL: "http://localhost:8080/" + shortCode,
+		ShortURL: "https://" + r.Host + "/" + shortCode,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -272,7 +272,7 @@ func qrHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	shortURL := "http://localhost:8080/" + shortCode
+	shortURL := "https://" + r.Host + "/" + shortCode
 
 	png, err := qrcode.Encode(shortURL, qrcode.Medium, 256)
 	if err != nil {
