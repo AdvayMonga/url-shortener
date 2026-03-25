@@ -2,6 +2,8 @@
 
 A lightweight URL shortener built with Go and SQLite.
 
+www.shortqrl.com
+
 ## Features
 
 - Shorten URLs with auto-generated or custom short codes
@@ -9,14 +11,6 @@ A lightweight URL shortener built with Go and SQLite.
 - Click tracking & statistics
 - Rate limiting (100 req/min per IP)
 - Simple web interface
-
-## Run
-
-```bash
-go run main.go
-```
-
-Open [http://localhost:8080](http://localhost:8080).
 
 ## API Endpoints
 
